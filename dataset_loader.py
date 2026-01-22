@@ -46,12 +46,17 @@ class NetraDataset(Dataset):
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ])
 
-    def _crop_to_circle(self, image_path):
-        """Handles Chákṣu Phone Images (removes black borders/noise)"""
+    def _detect_and_crop_fundus(self, image_path):
+        """Intelligent fundus image preprocessing for different resolutions.
+        
+        AIROGS: Already preprocessed to 512x512, minimal processing needed.
+        Chákṣu: Raw images with varied resolutions (1920x1440 to 2448x3264).
+                Requires circle detection and cropping to remove black borders.
+        """
         try:
             # Check for extension
             if not image_path.lower().endswith(('.jpg', '.png', '.jpeg')):
-                image_path += ".jpg" # Chákṣu CSV sometimes omits extension
+                image_path += ".jpg"  # Chákṣu CSV sometimes omits extension
                 
             full_path = os.path.join(self.root_dir, image_path)
             
@@ -68,18 +73,64 @@ class NetraDataset(Dataset):
                 return Image.new('RGB', (cfg.IMG_SIZE, cfg.IMG_SIZE))
 
             img_cv = cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB)
+            h_orig, w_orig = img_cv.shape[:2]
             
-            # Heuristic Crop for High-Res Phone Images
-            if self.dataset_type == 'chakshu':
-                h, w = img_cv.shape[:2]
-                if h > 1500:
-                    s = min(h, w)
-                    y = (h - s) // 2
-                    x = (w - s) // 2
-                    img_cv = img_cv[y:y+s, x:x+s]
+            # Different preprocessing based on dataset type
+            if self.dataset_type == 'airogs':
+                # AIROGS images are already preprocessed to 512x512 with circle crop
+                # Minimal processing - direct use
+                return Image.fromarray(img_cv)
+                
+            elif self.dataset_type == 'chakshu':
+                # Chákṣu requires aggressive circle cropping
+                # Resolutions: Remidio (2448×3264), Forus (2048×1536), Bosch (1920×1440)
+                
+                # Method 1: Center-Circle-Crop Heuristic (as per paper methodology)
+                # Works for high-res images where fundus is centered
+                if h_orig > 1500 or w_orig > 1500:
+                    # Create a square crop from center
+                    size = min(h_orig, w_orig)
+                    y_start = (h_orig - size) // 2
+                    x_start = (w_orig - size) // 2
+                    img_cv = img_cv[y_start:y_start+size, x_start:x_start+size]
+                
+                # Method 2: Intensity-based circle detection for remaining borders
+                # Convert to grayscale for mask detection
+                gray = cv2.cvtColor(img_cv, cv2.COLOR_RGB2GRAY)
+                
+                # Create mask: fundus is brighter than black borders
+                # Threshold at 10 to remove near-black regions
+                _, binary_mask = cv2.threshold(gray, 10, 255, cv2.THRESH_BINARY)
+                
+                # Find contours of the fundus region
+                contours, _ = cv2.findContours(binary_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                
+                if contours:
+                    # Get the largest contour (should be the fundus circle)
+                    largest_contour = max(contours, key=cv2.contourArea)
+                    x, y, w, h = cv2.boundingRect(largest_contour)
+                    
+                    # Expand bounding box slightly to avoid cutting fundus edges
+                    padding = int(0.02 * min(w, h))  # 2% padding
+                    x = max(0, x - padding)
+                    y = max(0, y - padding)
+                    w = min(img_cv.shape[1] - x, w + 2*padding)
+                    h = min(img_cv.shape[0] - y, h + 2*padding)
+                    
+                    # Crop to the fundus region
+                    img_cv = img_cv[y:y+h, x:x+w]
+                    
+                    # Make it square by cropping to center
+                    h_new, w_new = img_cv.shape[:2]
+                    size = min(h_new, w_new)
+                    y_start = (h_new - size) // 2
+                    x_start = (w_new - size) // 2
+                    img_cv = img_cv[y_start:y_start+size, x_start:x_start+size]
             
             return Image.fromarray(img_cv)
+            
         except Exception as e:
+            print(f"Warning: Failed to process {image_path}: {str(e)}")
             return Image.new('RGB', (cfg.IMG_SIZE, cfg.IMG_SIZE))
 
     def __len__(self):
@@ -87,7 +138,8 @@ class NetraDataset(Dataset):
 
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
-        img = self._crop_to_circle(str(row['path']))
+        # Apply intelligent preprocessing based on dataset type
+        img = self._detect_and_crop_fundus(str(row['path']))
         
         if self.mode == 'train':
             img = self.aug_transform(img)

@@ -22,11 +22,12 @@ Standard glaucoma screening models trained on Western datasets (e.g., EyePACS AI
 
 * `config.py`: **The Control Center.** Manages hardware profiles (RTX 5090 vs 2080 Ti), dataset selection (Light vs Full), and model hyperparameters.
 * `dataset_manager.py`: **Auto-Downloader.** Automatically fetches AIROGS (Kaggle), Chákṣu (Figshare), and handles file extraction.
-* `dataset_loader.py`: **Preprocessing Pipeline.** Implements robust circle-cropping to handle "Fundus-on-Phone" image artifacts and dimension mismatches.
+* `dataset_loader.py`: **Preprocessing Pipeline.** Implements intelligent resolution handling and circle-cropping to match AIROGS (512×512) with Chákṣu (2448×3264 to 1920×1440).
 * `netra_model.py`: **Model Architecture.** Implements the DINOv3 backbone and the custom `MixEntLayer` logic.
 * `main_train.py`: **Training Engine.** Executes the 3-Stage training pipeline (Head Training $\rightarrow$ Adaptation $\rightarrow$ Partial Fine-Tuning).
 * `evaluate.py`: **Evaluation Suite.** Calculates AUROC, Accuracy, and **Expected Calibration Error (ECE)**, and generates Attention Heatmaps.
 * `baselines.py`: Implementation of comparison methods (SHOT, Tent) for benchmarking.
+* `RESOLUTION_HANDLING.md`: **Detailed documentation** on how resolution differences between AIROGS and Chákṣu are handled.
 * `requirements.txt`: List of Python dependencies.
 
 ---
