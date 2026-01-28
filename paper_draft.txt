@@ -60,7 +60,7 @@ Target: Chákṣu (India). $N=1,345$. Resolution: Mixed ($2448 \times 3264$ to $
 Preprocessing Defense: All Chákṣu images were preprocessed using a Center-Circle-Crop heuristic to remove black borders and standardize the aspect ratio before resizing to 512px.
 4.2 Implementation Details
 We implemented Netra-Adapt in PyTorch.
-Backbone: vit_large_patch14_dinov2 (Proxy for DINOv3).
+Backbone: facebook/dinov3-vitl16-pretrain-lvd1689m (DINOv3 ViT-L/16).
 Hardware: Training performed on NVIDIA RTX 5090 (32GB, BF16). Inference validated on RTX 2080 Ti (11GB, FP16).
 Hyperparameters: SGD optimizer. Learning rate $1e-5$ (backbone), $1e-3$ (head). $\lambda=1.0$. Batch size=32.
 4.3 Quantitative Results
