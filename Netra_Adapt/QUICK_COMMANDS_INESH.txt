@@ -62,16 +62,7 @@ FORMAT NEEDED
 
 
 /workspace/Netra_Adapt/
-├── adapt_target.py
-├── dataset_loader.py
-├── download_chakshu.py
-├── evaluate.py
-├── models.py
-├── prepare_data.py
-├── setup_with_download.sh      
-├── train_oracle.py
-├── train_source.py
-├── utils.py
+
 └── data/
     ├── Train.zip                (8.1 GB - CHAKSHU train)
     └── Test.zip                 (2.6 GB - CHAKSHU test)
@@ -81,10 +72,8 @@ cd /workspace/Netra_Adapt
 chmod +x setup_with_download.sh
 ./setup_with_download.sh
 
-python train_source.py
-
-
-
+python prepare_data.py
+python run_full_pipeline.py
 
 
 hugginface token needed- go to huggingface, invalide refresh and paste
