@@ -272,8 +272,6 @@ def parse_chaksu_labels():
         "chaksu_train_unlabeled.csv"
     ]
     
-    for csv_name in expected_csvs
-    
     # Step 6: Save CSVs
     if train_labeled:
         df_train = pd.DataFrame(train_labeled)
@@ -308,7 +306,15 @@ def validate_data():
     """Quick validation of prepared data."""
     print(f"\n--- Validation ---")
     
-    for csv_name in ["airogs_train.csv", "chaksu_labeled.csv", "chaksu_unlabeled.csv"]:
+    expected_csvs = [
+        "airogs_train.csv",
+        "airogs_test.csv",
+        "chaksu_train_labeled.csv",
+        "chaksu_test_labeled.csv",
+        "chaksu_train_unlabeled.csv"
+    ]
+    
+    for csv_name in expected_csvs:
         csv_path = os.path.join(CSV_OUT_DIR, csv_name)
         if os.path.exists(csv_path):
             df = pd.read_csv(csv_path)

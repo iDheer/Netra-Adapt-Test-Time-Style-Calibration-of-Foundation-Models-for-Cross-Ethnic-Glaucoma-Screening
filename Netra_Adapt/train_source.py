@@ -100,7 +100,7 @@ def train():
     
     for epoch in range(MAX_EPOCHS):
         model.train()
-        loop = tqdm(loader, desc=f"Epoch {epoch+1}/{EPOCHS}")
+        loop = tqdm(loader, desc=f"Epoch {epoch+1}/{MAX_EPOCHS}")
         epoch_loss = 0
         correct = 0
         total = 0

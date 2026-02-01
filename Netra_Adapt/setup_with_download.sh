@@ -83,15 +83,19 @@ echo "      Checking for nested zips..."
 find "$TEMP_CHAKSU" -name "*.zip" -exec unzip -q {} -d "$TEMP_CHAKSU" \; 2>/dev/null
 
 echo "      Consolidating Chákṣu folders..."
-# Flatten the hierarchy: Pull Bosch/Forus/Remidio/Labels from deep subfolders to root
+# Preserve Train/Test structure
 
-# 1. Move Images
-find "$TEMP_CHAKSU" -type d -name "Bosch" -exec cp -r {}/. "$RAW_CHAKSU/Bosch/" \; 2>/dev/null
-find "$TEMP_CHAKSU" -type d -name "Forus" -exec cp -r {}/. "$RAW_CHAKSU/Forus/" \; 2>/dev/null
-find "$TEMP_CHAKSU" -type d -name "Remidio" -exec cp -r {}/. "$RAW_CHAKSU/Remidio/" \; 2>/dev/null
+# 1. Move Train folder with all subfolders intact
+if [ -d "$TEMP_CHAKSU/Train" ]; then
+    cp -r "$TEMP_CHAKSU/Train" "$RAW_CHAKSU/"
+    echo "      ✓ Train folder preserved"
+fi
 
-# 2. Move Labels (Folder starts with 6.0)
-find "$TEMP_CHAKSU" -type d -name "6.0_Glaucoma_Decision" -exec cp -r {}/. "$RAW_CHAKSU/6.0_Glaucoma_Decision/" \; 2>/dev/null
+# 2. Move Test folder with all subfolders intact  
+if [ -d "$TEMP_CHAKSU/Test" ]; then
+    cp -r "$TEMP_CHAKSU/Test" "$RAW_CHAKSU/"
+    echo "      ✓ Test folder preserved"
+fi
 
 # Cleanup
 rm -rf "$TEMP_CHAKSU"
