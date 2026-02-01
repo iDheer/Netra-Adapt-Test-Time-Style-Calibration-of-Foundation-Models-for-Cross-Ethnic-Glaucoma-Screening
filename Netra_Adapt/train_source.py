@@ -19,8 +19,8 @@ from utils import Logger
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 32  # Reduced for ViT-L memory requirements (512x512 input)
 EPOCHS = 30
-CSV_PATH = "/workspace/Netra_Adapt/data/processed_csvs/airogs_train.csv"
-SAVE_DIR = "/workspace/Netra_Adapt/results/Source_AIROGS"
+CSV_PATH = "/workspace/data/processed_csvs/airogs_train.csv"
+SAVE_DIR = "/workspace/results/Source_AIROGS"
 
 
 def train():
@@ -57,9 +57,9 @@ def train():
     # Optimizer with differential learning rates
     # - Backbone (unfrozen blocks): Low LR to preserve pretrained features
     # - Head: Higher LR for task-specific learning
-    # Note: HuggingFace DINOv3 uses encoder.layer instead of blocks
+    # DINOv3 uses 'layer' directly (not encoder.layer)
     optimizer = optim.AdamW([
-        {'params': model.backbone.encoder.layer[-2:].parameters(), 'lr': 1e-5},
+        {'params': model.backbone.layer[-2:].parameters(), 'lr': 1e-5},
         {'params': model.head.parameters(), 'lr': 1e-3}
     ], weight_decay=0.01)
     

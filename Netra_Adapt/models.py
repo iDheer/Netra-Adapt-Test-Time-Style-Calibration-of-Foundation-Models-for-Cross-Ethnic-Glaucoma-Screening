@@ -53,11 +53,24 @@ class NetraModel(nn.Module):
         
         # Unfreeze last N transformer blocks for adaptation
         # ViT-L has 24 layers (indices 0-23)
+        # DINOv3 uses 'layer' directly (not encoder.layer or blocks)
         if unfreeze_blocks > 0:
-            for layer in self.backbone.encoder.layer[-unfreeze_blocks:]:
-                for param in layer.parameters():
-                    param.requires_grad = True
-            print(f"  Unfroze last {unfreeze_blocks} transformer blocks")
+            # Access the layers - try different possible structures
+            if hasattr(self.backbone, 'layer'):
+                blocks = self.backbone.layer
+            elif hasattr(self.backbone, 'blocks'):
+                blocks = self.backbone.blocks
+            elif hasattr(self.backbone, 'encoder') and hasattr(self.backbone.encoder, 'layer'):
+                blocks = self.backbone.encoder.layer
+            else:
+                print(f"  Warning: Could not find transformer blocks.")
+                blocks = []
+            
+            if blocks:
+                for layer in blocks[-unfreeze_blocks:]:
+                    for param in layer.parameters():
+                        param.requires_grad = True
+                print(f"  Unfroze last {unfreeze_blocks} transformer blocks")
                 
         # Classification head
         self.head = nn.Linear(self.feature_dim, num_classes)
@@ -107,6 +120,11 @@ class NetraModel(nn.Module):
             
     def unfreeze_last_blocks(self, n=2):
         """Unfreeze last n transformer blocks."""
-        for layer in self.backbone.encoder.layer[-n:]:
-            for param in layer.parameters():
-                param.requires_grad = True
+        if hasattr(self.backbone, 'layer'):
+            for layer in self.backbone.layer[-n:]:
+                for param in layer.parameters():
+                    param.requires_grad = True
+        elif hasattr(self.backbone, 'encoder') and hasattr(self.backbone.encoder, 'layer'):
+            for layer in self.backbone.encoder.layer[-n:]:
+                for param in layer.parameters():
+                    param.requires_grad = True

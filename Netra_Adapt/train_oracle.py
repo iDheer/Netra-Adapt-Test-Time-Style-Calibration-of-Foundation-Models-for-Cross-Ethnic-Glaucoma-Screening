@@ -22,8 +22,8 @@ from utils import Logger
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 24  # Smaller batch for smaller dataset + ViT-L memory
 EPOCHS = 40
-CSV_PATH = "/workspace/Netra_Adapt/data/processed_csvs/chaksu_labeled.csv"
-SAVE_DIR = "/workspace/Netra_Adapt/results/Oracle_Chaksu"
+CSV_PATH = "/workspace/data/processed_csvs/chaksu_labeled.csv"
+SAVE_DIR = "/workspace/results/Oracle_Chaksu"
 
 
 def train():

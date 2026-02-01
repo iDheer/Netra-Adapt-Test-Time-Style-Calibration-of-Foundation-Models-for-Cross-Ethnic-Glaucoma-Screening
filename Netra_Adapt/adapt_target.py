@@ -24,9 +24,9 @@ from utils import Logger
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 32  # Reduced for ViT-L memory with 512x512 input
 EPOCHS = 15
-SOURCE_WEIGHTS = "/workspace/Netra_Adapt/results/Source_AIROGS/model.pth"
-TARGET_CSV = "/workspace/Netra_Adapt/data/processed_csvs/chaksu_unlabeled.csv"
-SAVE_DIR = "/workspace/Netra_Adapt/results/Netra_Adapt"
+SOURCE_WEIGHTS = "/workspace/results/Source_AIROGS/model.pth"
+TARGET_CSV = "/workspace/data/processed_csvs/chaksu_unlabeled.csv"
+SAVE_DIR = "/workspace/results/Netra_Adapt"
 
 
 def mixent_adapt(features, logits, lambda_mix=0.5):

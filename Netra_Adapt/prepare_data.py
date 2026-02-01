@@ -17,7 +17,7 @@ import numpy as np
 from pathlib import Path
 
 # --- CONFIG ---
-BASE_DIR = "/workspace/Netra_Adapt/data"
+BASE_DIR = "/workspace/data"
 AIROGS_DIR = os.path.join(BASE_DIR, "raw_airogs")
 CHAKSU_DIR = os.path.join(BASE_DIR, "raw_chaksu")
 CSV_OUT_DIR = os.path.join(BASE_DIR, "processed_csvs")
