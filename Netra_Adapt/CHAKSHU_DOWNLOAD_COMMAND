@@ -1,0 +1,31 @@
+cat > download_chaksu.py << 'EOF'
+import urllib.request, json, os
+
+article_id = 20123135
+url = f"https://api.figshare.com/v2/articles/{article_id}/files"
+
+print(f"Fetching file list for Article {article_id}...")
+try:
+    # Get the file list from Figshare API
+    req = urllib.request.Request(url)
+    response = urllib.request.urlopen(req)
+    data = json.loads(response.read().decode())
+    
+    print(f"Found {len(data)} files. Starting downloads...\n")
+    
+    for f in data:
+        name = f['name']
+        download_url = f['download_url']
+        size_mb = f['size'] / (1024 * 1024)
+        
+        print(f"Downloading: {name} ({size_mb:.2f} MB)")
+        # Use wget to download (quoted to handle spaces safely)
+        os.system(f"wget -q --show-progress -O '{name}' '{download_url}'")
+        print("Done.\n")
+        
+except Exception as e:
+    print(f"Error: {e}")
+EOF
+
+# Now run the script
+python3 download_chaksu.py
