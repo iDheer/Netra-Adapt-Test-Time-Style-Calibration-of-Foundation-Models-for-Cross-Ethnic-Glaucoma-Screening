@@ -28,6 +28,11 @@ from tqdm import tqdm
 from sklearn.metrics import (roc_auc_score, roc_curve, confusion_matrix, 
                              precision_recall_fscore_support, accuracy_score)
 import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+from models import NetraModel
+from dataset_loader import GlaucomaDataset, get_transforms
+from training_logger import get_logger
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -36,34 +41,46 @@ from dataset_loader import GlaucomaDataset, get_transforms
 
 # --- CONFIGURATION ---
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-TEST_CSV = "/workspace/data/processed_csvs/chaksu_labeled.csv"
+TEST_CSV_CHAKSU = "/workspace/data/processed_csvs/chaksu_test_labeled.csv"  # Test split only!
+TEST_CSV_AIROGS = "/workspace/data/processed_csvs/airogs_test.csv"  # For AIROGS→AIROGS sanity check
 RESULTS_DIR = "/workspace/results/evaluation"
 
-# Model paths
-MODELS = {
-    "Source (AIROGS)": "/workspace/results/Source_AIROGS/model.pth",
-    "Oracle (Supervised)": "/workspace/results/Oracle_Chaksu/oracle_model.pth",
-    "Netra-Adapt (SFDA)": "/workspace/results/Netra_Adapt/adapted_model.pth",
+# Model paths - Named as "Train → Test" for clarity
+MODELS_CHAKSU = {
+    "Pretrained → Chákṣu": None,  # Vanilla DINOv3, no fine-tuning
+    "AIROGS → Chákṣu": "/workspace/results/Source_AIROGS/model.pth",  # Source-only baseline
+    "Chákṣu → Chákṣu": "/workspace/results/Oracle_Chaksu/oracle_model.pth",  # Oracle (upper bound)
+    "AIROGS+Adapt → Chákṣu": "/workspace/results/Netra_Adapt/adapted_model.pth",  # Netra-Adapt (SFDA)
+}
+
+# Sanity check: Source model on source domain
+MODELS_AIROGS = {
+    "AIROGS → AIROGS": "/workspace/results/Source_AIROGS/model.pth",
 }
 
 # Create results directory
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
 
-def evaluate(model_path, name):
+def evaluate(model_path, name, test_csv):
     """Evaluate a single model on the test set with comprehensive metrics."""
-    
-    if not os.path.exists(model_path):
-        print(f"  [SKIP] Model not found: {model_path}")
-        return None
     
     # Load model
     model = NetraModel(num_classes=2).to(DEVICE)
-    model.load_state_dict(torch.load(model_path, map_location=DEVICE))
+    
+    if model_path is None:
+        # Vanilla DINOv3: pretrained backbone + random head (no fine-tuning)
+        print(f"  Using pretrained DINOv3 with random classifier head (no fine-tuning)")
+    else:
+        if not os.path.exists(model_path):
+            print(f"  [SKIP] Model not found: {model_path}")
+            return None
+        model.load_state_dict(torch.load(model_path, map_location=DEVICE))
+    
     model.eval()
     
     # Load test data
-    dataset = GlaucomaDataset(TEST_CSV, transform=get_transforms(is_training=False))
+    dataset = GlaucomaDataset(test_csv, transform=get_transforms(is_training=False))
     loader = DataLoader(dataset, batch_size=32, shuffle=False, num_workers=4)
     
     all_labels = []
@@ -138,7 +155,7 @@ def evaluate(model_path, name):
     
     return metrics
 
-
+95a5a6', '#e74c3c', '#3498db', '#2ecc71']  # Gray for vanilla, then red/blue/green
 def plot_roc_curves(all_results):
     """Plot ROC curves for all models on same figure"""
     plt.figure(figsize=(10, 8))
@@ -171,7 +188,7 @@ def plot_roc_curves(all_results):
 
 def plot_confusion_matrices(all_results):
     """Plot confusion matrices for all models"""
-    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+    fig, axes = plt.subplots(1, 4, figsize=(20, 4))
     
     for idx, (name, metrics) in enumerate(all_results.items()):
         if metrics and 'confusion_matrix' in metrics:
@@ -202,7 +219,7 @@ def plot_metrics_comparison(all_results):
     fig, axes = plt.subplots(2, 3, figsize=(16, 10))
     axes = axes.flatten()
     
-    colors = ['#e74c3c', '#3498db', '#2ecc71']
+    colors = ['#95a5a6', '#e74c3c', '#3498db', '#2ecc71']  # Gray, Red, Blue, Green
     
     for idx, (metric, name) in enumerate(zip(metrics_to_plot, metric_names)):
         ax = axes[idx]
@@ -263,27 +280,54 @@ def save_results_table(all_results):
 
 
 def main():
+    # Initialize experiment logger
+    exp_logger = get_logger()
+    
     print("\n" + "="*70)
     print("   NETRA-ADAPT: COMPREHENSIVE EVALUATION")
-    print("   Test Set: Chákṣu (Indian Eyes, n=228)")
+    print("="*70)
+    
+    # === Part 1: Sanity Check on AIROGS ===
+    print("\n[SANITY CHECK] Evaluating on AIROGS Test Set")
+    print("-" * 70)
+    
+    if not os.path.exists(TEST_CSV_AIROGS):
+        print(f"[SKIP] AIROGS test CSV not found: {TEST_CSV_AIROGS}")
+    else:
+        for name, path in MODELS_AIROGS.items():
+            print(f"\n{name}")
+            metrics = evaluate(path, name, TEST_CSV_AIROGS)
+            if metrics:
+                print(f"  AUROC: {metrics['auroc']:.4f} - Should be >0.85 if model learned!")
+    
+    # === Part 2: Main Experiments on Chákṣu ===
+    print("\n\n[MAIN EXPERIMENTS] Evaluating on Chákṣu Test Set (Cross-Ethnic)")
+    print("-" * 70)
+    print("   1. Pretrained → Chákṣu          (Vanilla DINOv3)")
+    print("   2. AIROGS → Chákṣu              (Source-only)")
+    print("   3. Chákṣu → Chákṣu              (Oracle, Upper Bound)")
+    print("   4. AIROGS+Adapt → Chákṣu        (Netra-Adapt SFDA)")
     print("="*70)
     
     # Validate test data exists
-    if not os.path.exists(TEST_CSV):
-        print(f"\n[ERROR] Test CSV not found: {TEST_CSV}")
+    if not os.path.exists(TEST_CSV_CHAKSU):
+        print(f"\n[ERROR] Chákṣu test CSV not found: {TEST_CSV_CHAKSU}")
         print("        Run prepare_data.py first!")
         return
     
     all_results = {}
     
-    for name, path in MODELS.items():
+    for name, path in MODELS_CHAKSU.items():
         print(f"\n{name}")
         print("-" * 70)
         
-        metrics = evaluate(path, name)
+        metrics = evaluate(path, name, TEST_CSV_CHAKSU)
         
         if metrics:
             all_results[name] = metrics
+            
+            # Log metrics to experiment logger
+            exp_logger.log_evaluation_metrics(name, metrics)
             
             print(f"  AUROC:        {metrics['auroc']:.4f} ({metrics['auroc']*100:.1f}%)")
             print(f"  Sensitivity:  {metrics['sensitivity']:.4f} ({metrics['sensitivity']*100:.1f}%)")
@@ -300,10 +344,19 @@ def main():
     print("   GENERATING VISUALIZATIONS...")
     print("="*70)
     
+    eval_dir = exp_logger.get_phase_dir("evaluation")
     plot_roc_curves(all_results)
+    exp_logger.log_visualization("evaluation", "roc_curves.png", "ROC curves for all models")
+    
     plot_confusion_matrices(all_results)
+    exp_logger.log_visualization("evaluation", "confusion_matrices.png", "Confusion matrices for all models")
+    
     plot_metrics_comparison(all_results)
+    exp_logger.log_visualization("evaluation", "metrics_comparison.png", "Metrics comparison bar chart")
+    
     save_results_table(all_results)
+    exp_logger.log_visualization("evaluation", "results.csv", "Results table (CSV)")
+    exp_logger.log_visualization("evaluation", "results_latex.txt", "Results table (LaTeX)")
     
     print("\n" + "="*70)
     print("   EVALUATION COMPLETE")

@@ -16,16 +16,20 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+import time
 from models import NetraModel
 from dataset_loader import GlaucomaDataset, get_transforms
+from training_logger import get_logger
 from utils import Logger
 
 # --- CONFIGURATION ---
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 32  # Reduced for ViT-L memory with 512x512 input
-EPOCHS = 15
+MAX_EPOCHS = 25  # Upper limit for adaptation
+EARLY_STOP_PATIENCE = 5  # Stop if loss plateaus
+MIN_DELTA = 1e-4  # Minimum loss improvement
 SOURCE_WEIGHTS = "/workspace/results/Source_AIROGS/model.pth"
-TARGET_CSV = "/workspace/data/processed_csvs/chaksu_unlabeled.csv"
+TARGET_CSV = "/workspace/data/processed_csvs/chaksu_train_unlabeled.csv"  # Training split only!
 SAVE_DIR = "/workspace/results/Netra_Adapt"
 
 
@@ -154,10 +158,16 @@ def run_adapt():
     
     print("--- Phase C: MixEnt-Adapt (Source-Free Domain Adaptation) ---")
     print(f"    Using Information Maximization Loss (λ_div={lambda_div})")
+    print(f"    Early Stopping: patience={EARLY_STOP_PATIENCE}, min_delta={MIN_DELTA}")
     
-    for epoch in range(EPOCHS):
+    # Early stopping variables
+    best_loss = float('inf')
+    patience_counter = 0
+    best_model_state = None
+    
+    for epoch in range(MAX_EPOCHS):
         model.train()
-        loop = tqdm(loader, desc=f"Epoch {epoch+1}/{EPOCHS}")
+        loop = tqdm(loader, desc=f"Epoch {epoch+1}/{MAX_EPOCHS}")
         epoch_loss = 0
         
         for images, _ in loop:
@@ -201,10 +211,41 @@ def run_adapt():
             
         avg_loss = epoch_loss / len(loader)
         logger.log(epoch+1, avg_loss)
+        exp_logger.log_epoch("adapt", epoch+1, MAX_EPOCHS, {
+            "loss": avg_loss,
+            "L_ent": L_ent.item(),
+            "L_div": L_div.item()
+        })
         print(f"  Epoch {epoch+1} Complete - Avg Loss: {avg_loss:.4f}")
         
-    torch.save(model.state_dict(), f"{SAVE_DIR}/adapted_model.pth")
+        # Early stopping logic
+        if avg_loss < (best_loss - MIN_DELTA):
+            best_loss = avg_loss
+            patience_counter = 0
+            best_model_state = model.state_dict().copy()
+            print(f"  ✓ New best loss: {best_loss:.4f} (patience reset)")
+            # Save best model during training
+            torch.save(best_model_state, f"{SAVE_DIR}/adapted_model.pth")
+        else:
+            patience_counter += 1
+            print(f"  ✗ No improvement (patience: {patience_counter}/{EARLY_STOP_PATIENCE})")
+            
+        if patience_counter >= EARLY_STOP_PATIENCE:
+            exp_logger.log_early_stopping("adapt", epoch+1, best_loss)
+            print(f"\n⏹ Early stopping triggered after {epoch+1} epochs")
+            print(f"   Best loss was: {best_loss:.4f}")
+            break
+    
+    # Load best model if training completed without early stopping
+    if best_model_state is not None and patience_counter < EARLY_STOP_PATIENCE:
+        torch.save(best_model_state, f"{SAVE_DIR}/adapted_model.pth")
+    
+    training_time = time.time() - start_time
+    exp_logger.log_phase_end("adapt", training_time)
+        
     print(f"\n✅ Adaptation Complete. Model saved to {SAVE_DIR}/adapted_model.pth")
+    print(f"   Best loss achieved: {best_loss:.4f}")
+    print(f"   Training time: {training_time/60:.1f} minutes")
 
 if __name__ == "__main__":
     run_adapt()

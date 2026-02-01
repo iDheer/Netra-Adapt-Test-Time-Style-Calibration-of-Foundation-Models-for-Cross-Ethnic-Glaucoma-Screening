@@ -14,15 +14,19 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+import time
 from models import NetraModel
 from dataset_loader import GlaucomaDataset, get_transforms
 from utils import Logger
+from training_logger import get_logger
 
 # --- CONFIGURATION ---
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 24  # Smaller batch for smaller dataset + ViT-L memory
-EPOCHS = 40
-CSV_PATH = "/workspace/data/processed_csvs/chaksu_labeled.csv"
+MAX_EPOCHS = 60  # Upper limit (higher for small dataset)
+EARLY_STOP_PATIENCE = 8  # More patience for small dataset
+MIN_DELTA = 1e-4  # Minimum loss improvement
+CSV_PATH = "/workspace/data/processed_csvs/chaksu_train_labeled.csv"  # Training split only!
 SAVE_DIR = "/workspace/results/Oracle_Chaksu"
 
 
@@ -101,12 +105,31 @@ def train():
         avg_loss = epoch_loss / len(loader)
         accuracy = 100. * correct / total
         logger.log(epoch+1, avg_loss)
-        print(f"  Epoch {epoch+1}: Loss={avg_loss:.4f}, Accuracy={accuracy:.2f}%")
+        print(f"  Epoch {epoch+1}/{MAX_EPOCHS}: Loss={avg_loss:.4f}, Accuracy={accuracy:.2f}%")
+        
+        # Early stopping check
+        if avg_loss < best_loss - MIN_DELTA:
+            best_loss = avg_loss
+            patience_counter = 0
+            torch.save(model.state_dict(), best_model_path)
+            print(f"  ✓ New best loss: {best_loss:.4f} (saved)")
+        else:
+            patience_counter += 1
+            print(f"  No improvement ({patience_counter}/{EARLY_STOP_PATIENCE})")
+            
+            if patience_counter >= EARLY_STOP_PATIENCE:
+                print(f"\n⚠ Early stopping triggered! No improvement for {EARLY_STOP_PATIENCE} epochs.")
+                print(f"  Best loss: {best_loss:.4f} at epoch {epoch+1-EARLY_STOP_PATIENCE}")
+                break
     
-    # Save model
+    # Load best model and save as final
+    if os.path.exists(best_model_path):
+        model.load_state_dict(torch.load(best_model_path))
+        print(f"\n✓ Loaded best model (loss={best_loss:.4f})")
+    
     save_path = f"{SAVE_DIR}/oracle_model.pth"
     torch.save(model.state_dict(), save_path)
-    print(f"\n✅ Oracle training complete! Model saved to {save_path}")
+    print(f"✅ Oracle training complete! Model saved to {save_path}")
 
 
 if __name__ == "__main__":

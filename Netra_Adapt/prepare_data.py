@@ -36,7 +36,14 @@ def find_folder(base_path, folder_name, recursive=True):
 
 
 def prepare_airogs():
-    """Process AIROGS dataset with RG/NRG folder structure."""
+    """Process AIROGS dataset with RG/NRG folder structure.
+    
+    Creates TWO CSVs:
+    - airogs_train.csv: For training Source model
+    - airogs_test.csv: For testing Source model (sanity check)
+    
+    Uses 80-20 split if no explicit test set exists.
+    """
     print(f"--- Processing AIROGS ---")
     records = []
     
@@ -58,9 +65,23 @@ def prepare_airogs():
         
     if records:
         df = pd.DataFrame(records)
-        out_path = os.path.join(CSV_OUT_DIR, "airogs_train.csv")
-        df.to_csv(out_path, index=False)
-        print(f"  ✓ Saved {out_path} ({len(df)} images)")
+        
+        # Shuffle and split 80-20
+        df = df.sample(frac=1, random_state=42).reset_index(drop=True)
+        split_idx = int(len(df) * 0.8)
+        
+        df_train = df[:split_idx]
+        df_test = df[split_idx:]
+        
+        # Save train
+        train_path = os.path.join(CSV_OUT_DIR, "airogs_train.csv")
+        df_train.to_csv(train_path, index=False)
+        print(f"  ✓ Saved {train_path} ({len(df_train)} images)")
+        
+        # Save test
+        test_path = os.path.join(CSV_OUT_DIR, "airogs_test.csv")
+        df_test.to_csv(test_path, index=False)
+        print(f"  ✓ Saved {test_path} ({len(df_test)} images)")
     else:
         print("[ERROR] No AIROGS images found!")
         print(f"  Expected structure: {AIROGS_DIR}/RG/*.jpg and {AIROGS_DIR}/NRG/*.jpg")
@@ -216,27 +237,71 @@ def parse_chaksu_labels():
     
     print(f"  Matched: {len(labeled_records)} labeled, {len(unlabeled_records)} unlabeled")
     
-    # Step 5: Save CSVs
-    if labeled_records:
-        df_lab = pd.DataFrame(labeled_records)
+    # Step 5: Separate Train vs Test based on folder structure
+    train_labeled = []
+    test_labeled = []
+    train_all = []
+    test_all = []
+    
+    for rec in labeled_records:
+        if '/Train/' in rec['path'] or '\\Train\\' in rec['path']:
+            train_labeled.append(rec)
+            train_all.append(rec)
+        elif '/Test/' in rec['path'] or '\\Test\\' in rec['path']:
+            test_labeled.append(rec)
+            test_all.append(rec)
+        else:
+            # If no Train/Test in path, add to train by default
+            train_labeled.append(rec)
+            train_all.append(rec)
+    
+    for rec in unlabeled_records:
+        if '/Train/' in rec['path'] or '\\Train\\' in rec['path']:
+            train_all.append(rec)
+        elif '/Test/' in rec['path'] or '\\Test\\' in rec['path']:
+            test_all.append(rec)
+        else:
+            train_all.append(rec)
+    
+    print(f"  Train split: {len(train_labeled)} labeled, {len(train_all)} total")
+    expected_csvs = [
+        "airogs_train.csv",
+        "airogs_test.csv",
+        "chaksu_train_labeled.csv",
+        "chaksu_test_labeled.csv",
+        "chaksu_train_unlabeled.csv"
+    ]
+    
+    for csv_name in expected_csvs
+    
+    # Step 6: Save CSVs
+    if train_labeled:
+        df_train = pd.DataFrame(train_labeled)
+        n_glaucoma = sum(1 for r in train_labeled if r['label'] == 1)
+        n_normal = sum(1 for r in train_labeled if r['label'] == 0)
+        print(f"  Train class distribution: Normal={n_normal}, Glaucoma={n_glaucoma}")
         
-        # Count class distribution
-        n_glaucoma = sum(1 for r in labeled_records if r['label'] == 1)
-        n_normal = sum(1 for r in labeled_records if r['label'] == 0)
-        print(f"  Class distribution: Normal={n_normal}, Glaucoma={n_glaucoma}")
+        out_path = os.path.join(CSV_OUT_DIR, "chaksu_train_labeled.csv")
+        df_train.to_csv(out_path, index=False)
+        print(f"  ✓ Saved {out_path} ({len(df_train)} images) - FOR ORACLE TRAINING")
+    
+    if test_labeled:
+        df_test = pd.DataFrame(test_labeled)
+        n_glaucoma = sum(1 for r in test_labeled if r['label'] == 1)
+        n_normal = sum(1 for r in test_labeled if r['label'] == 0)
+        print(f"  Test class distribution: Normal={n_normal}, Glaucoma={n_glaucoma}")
         
-        out_path = os.path.join(CSV_OUT_DIR, "chaksu_labeled.csv")
-        df_lab.to_csv(out_path, index=False)
-        print(f"  ✓ Saved {out_path} ({len(df_lab)} images) - FOR PHASE B (ORACLE) & EVALUATION")
+        out_path = os.path.join(CSV_OUT_DIR, "chaksu_test_labeled.csv")
+        df_test.to_csv(out_path, index=False)
+        print(f"  ✓ Saved {out_path} ({len(df_test)} images) - FOR ALL EVALUATIONS")
         
-    # For Phase C (Adaptation), we use ALL images (labels ignored by adaptation algorithm)
-    if labeled_records or unlabeled_records:
-        all_recs = labeled_records + unlabeled_records
-        df_all = pd.DataFrame(all_recs)
+    # For Phase C (Adaptation), use ALL training images (labels ignored)
+    if train_all:
+        df_all = pd.DataFrame(train_all)
         df_all['label'] = -1  # Force unlabeled (SFDA doesn't use labels)
-        out_path = os.path.join(CSV_OUT_DIR, "chaksu_unlabeled.csv")
+        out_path = os.path.join(CSV_OUT_DIR, "chaksu_train_unlabeled.csv")
         df_all.to_csv(out_path, index=False)
-        print(f"  ✓ Saved {out_path} ({len(df_all)} images) - FOR PHASE C (ADAPT)")
+        print(f"  ✓ Saved {out_path} ({len(df_all)} images) - FOR NETRA-ADAPT")
 
 
 def validate_data():
