@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # --- CONFIG ---
-BASE_DIR="/workspace/Netra_Adapt"
+BASE_DIR="/workspace"
 DATA_DIR="$BASE_DIR/data"
 RAW_AIROGS="$DATA_DIR/raw_airogs"
 RAW_CHAKSU="$DATA_DIR/raw_chaksu"
 
 echo "========================================================"
-echo "   NETRA-ADAPT: SETUP (NO AUTO-DOWNLOAD)"
+echo "   NETRA-ADAPT: SETUP FROM KAGGLE + CHAKSHU"
 echo "========================================================"
 
 # 1. INSTALL DEPENDENCIES
@@ -22,25 +22,37 @@ mkdir -p "$RAW_CHAKSU"
 mkdir -p "$BASE_DIR/results"
 mkdir -p "$DATA_DIR/processed_csvs"
 
-# 3. PROCESS AIROGS (archive.zip - User Uploaded)
+# 3. PROCESS AIROGS (Already downloaded via Kaggle)
 echo "[2/4] Processing AIROGS..."
-if [ -f "$DATA_DIR/archive.zip" ]; then
-    echo "      Unzipping archive.zip..."
-    unzip -q "$DATA_DIR/archive.zip" -d "$RAW_AIROGS"
+
+# Check if Kaggle zip needs to be unzipped
+KAGGLE_ZIP="$BASE_DIR/glaucoma-dataset-eyepacs-airogs-light-v2.zip"
+if [ -f "$KAGGLE_ZIP" ] && [ ! -d "$BASE_DIR/glaucoma_dataset" ]; then
+    echo "      Unzipping Kaggle AIROGS dataset..."
+    unzip -q "$KAGGLE_ZIP" -d "$BASE_DIR"
+fi
+
+KAGGLE_AIROGS="$BASE_DIR/glaucoma_dataset/eyepac-light-v2-512-jpg"
+
+if [ -d "$KAGGLE_AIROGS" ]; then
+    echo "      Found Kaggle AIROGS dataset"
     
-    echo "      Organizing AIROGS..."
-    # Smart Find: Locates RG/NRG folders wherever they unzipped and moves them to root
-    find "$RAW_AIROGS" -type d -name "RG" -exec mv {} "$RAW_AIROGS/" \; 2>/dev/null
-    find "$RAW_AIROGS" -type d -name "NRG" -exec mv {} "$RAW_AIROGS/" \; 2>/dev/null
+    # Combine train/test/validation into single RG and NRG folders
+    mkdir -p "$RAW_AIROGS/RG"
+    mkdir -p "$RAW_AIROGS/NRG"
     
-    # Cleanup empty folders
-    rm -rf "$RAW_AIROGS/eyepac-light-v2-512-jpg"
+    echo "      Copying RG (glaucoma) images..."
+    find "$KAGGLE_AIROGS" -path "*/RG/*.jpg" -exec cp {} "$RAW_AIROGS/RG/" \; 2>/dev/null
     
-    # Verify count
-    COUNT=$(find "$RAW_AIROGS/RG" -type f 2>/dev/null | wc -l)
-    echo "      ✓ Found $COUNT RG images."
+    echo "      Copying NRG (normal) images..."
+    find "$KAGGLE_AIROGS" -path "*/NRG/*.jpg" -exec cp {} "$RAW_AIROGS/NRG/" \; 2>/dev/null
+    
+    # Count images
+    RG_COUNT=$(ls "$RAW_AIROGS/RG" 2>/dev/null | wc -l)
+    NRG_COUNT=$(ls "$RAW_AIROGS/NRG" 2>/dev/null | wc -l)
+    echo "      ✓ Found $RG_COUNT RG images and $NRG_COUNT NRG images."
 else
-    echo "[WARNING] archive.zip not found in $DATA_DIR - skipping AIROGS"
+    echo "[WARNING] Kaggle AIROGS dataset not found at $KAGGLE_AIROGS"
 fi
 
 # 4. PROCESS CHAKSU (Train.zip and Test.zip - User Uploaded)
@@ -50,18 +62,20 @@ mkdir -p "$TEMP_CHAKSU"
 
 # Process Train.zip
 if [ -f "$DATA_DIR/Train.zip" ]; then
-    echo "      Unzipping Train.zip..."
+    echo "      Extracting Train.zip..."
     unzip -q "$DATA_DIR/Train.zip" -d "$TEMP_CHAKSU"
+    echo "      ✓ Train set extracted"
 else
-    echo "[WARNING] Train.zip not found"
+    echo "[WARNING] Train.zip not found in $DATA_DIR"
 fi
 
 # Process Test.zip
 if [ -f "$DATA_DIR/Test.zip" ]; then
-    echo "      Unzipping Test.zip..."
+    echo "      Extracting Test.zip..."
     unzip -q "$DATA_DIR/Test.zip" -d "$TEMP_CHAKSU"
+    echo "      ✓ Test set extracted"
 else
-    echo "[WARNING] Test.zip not found"
+    echo "[WARNING] Test.zip not found in $DATA_DIR"
 fi
 
 # Handle nested zips if any

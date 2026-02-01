@@ -1,14 +1,15 @@
-API TOKEN KAGGLE for AIROGS - V2
+# 1. Install the official Kaggle client
+pip install kaggle
 
-KGAT_0976ca4654d6cf8831b434187fc9660d
-
-To use this token, set the KAGGLE_API_TOKEN environment variable:
-
+# 2. Set the token variable (copy-pasted from your message)
 export KAGGLE_API_TOKEN=KGAT_0976ca4654d6cf8831b434187fc9660d
-After setting KAGGLE_API_TOKEN, you can use the client as follows:
 
-kaggle competitions list
+# 3. Download the dataset
+# Note: This dataset slug already includes "v2" in the name, matching your screenshot
+kaggle datasets download -d deathtrooper/glaucoma-dataset-eyepacs-airogs-light-v2
 
+# 4. Unzip the data
+unzip glaucoma-dataset-eyepacs-airogs-light-v2.zip -d glaucoma_dataset
 
 
 
@@ -72,7 +73,6 @@ FORMAT NEEDED
 ├── train_source.py
 ├── utils.py
 └── data/
-    ├── archive.zip              (525 MB - AIROGS)
     ├── Train.zip                (8.1 GB - CHAKSHU train)
     └── Test.zip                 (2.6 GB - CHAKSHU test)
 
