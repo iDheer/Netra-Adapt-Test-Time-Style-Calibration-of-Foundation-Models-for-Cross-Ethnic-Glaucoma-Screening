@@ -1,3 +1,24 @@
+API TOKEN KAGGLE for AIROGS - V2
+
+KGAT_0976ca4654d6cf8831b434187fc9660d
+
+To use this token, set the KAGGLE_API_TOKEN environment variable:
+
+export KAGGLE_API_TOKEN=KGAT_0976ca4654d6cf8831b434187fc9660d
+After setting KAGGLE_API_TOKEN, you can use the client as follows:
+
+kaggle competitions list
+
+
+
+
+(MAKE SURE ALL THE DOWNLOADED STUFF IS IN A SUBFOLDER CALLED "data")
+
+
+
+
+download CHAKSHU DATASET BY COPY PASTING BELOW COMMAND IN THE TERMINAL 
+
 cat > download_chaksu.py << 'EOF'
 import urllib.request, json, os
 
