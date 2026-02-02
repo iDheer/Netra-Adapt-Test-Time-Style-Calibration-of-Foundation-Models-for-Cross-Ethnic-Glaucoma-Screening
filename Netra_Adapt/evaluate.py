@@ -155,7 +155,7 @@ def evaluate(model_path, name, test_csv):
     
     return metrics
 
-95a5a6', '#e74c3c', '#3498db', '#2ecc71']  # Gray for vanilla, then red/blue/green
+
 def plot_roc_curves(all_results):
     """Plot ROC curves for all models on same figure"""
     plt.figure(figsize=(10, 8))
@@ -326,8 +326,19 @@ def main():
         if metrics:
             all_results[name] = metrics
             
+            # Prepare metrics for JSON serialization (convert numpy arrays)
+            metrics_for_log = {
+                'auroc': float(metrics['auroc']),
+                'sensitivity': float(metrics['sensitivity']),
+                'specificity': float(metrics['specificity']),
+                'precision': float(metrics['precision']),
+                'f1': float(metrics['f1']),
+                'accuracy': float(metrics['accuracy']),
+                'sens_at_95': float(metrics['sens_at_95'])
+            }
+            
             # Log metrics to experiment logger
-            exp_logger.log_evaluation_metrics(name, metrics)
+            exp_logger.log_evaluation_metrics(name, metrics_for_log)
             
             print(f"  AUROC:        {metrics['auroc']:.4f} ({metrics['auroc']*100:.1f}%)")
             print(f"  Sensitivity:  {metrics['sensitivity']:.4f} ({metrics['sensitivity']*100:.1f}%)")

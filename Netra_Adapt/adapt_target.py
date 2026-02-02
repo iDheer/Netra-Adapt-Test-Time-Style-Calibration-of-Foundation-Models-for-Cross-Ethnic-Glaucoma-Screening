@@ -113,6 +113,7 @@ def run_adapt():
     # Create save directory
     os.makedirs(SAVE_DIR, exist_ok=True)
     logger = Logger(save_dir=SAVE_DIR)
+    exp_logger = get_logger()
     
     # Validate source model exists
     if not os.path.exists(SOURCE_WEIGHTS):
@@ -147,9 +148,9 @@ def run_adapt():
     print(f"  Batches per epoch: {len(loader)}")
     
     # Optimizer with very low LR for adaptation
-    # Note: HuggingFace DINOv3 uses encoder.layer instead of blocks
+    # Note: HuggingFace DINOv3 uses layer directly (not encoder.layer)
     optimizer = optim.SGD([
-        {'params': model.backbone.encoder.layer[-2:].parameters(), 'lr': 1e-6},
+        {'params': model.backbone.layer[-2:].parameters(), 'lr': 1e-6},
         {'params': model.head.parameters(), 'lr': 1e-4}
     ], momentum=0.9)
     
@@ -160,10 +161,25 @@ def run_adapt():
     print(f"    Using Information Maximization Loss (λ_div={lambda_div})")
     print(f"    Early Stopping: patience={EARLY_STOP_PATIENCE}, min_delta={MIN_DELTA}")
     
+    # Log phase start
+    exp_logger.log_phase_start("adapt", {
+        "algorithm": "MixEnt-Adapt",
+        "source_model": SOURCE_WEIGHTS,
+        "target_dataset": TARGET_CSV,
+        "batch_size": BATCH_SIZE,
+        "max_epochs": MAX_EPOCHS,
+        "optimizer": "SGD",
+        "backbone_lr": 1e-6,
+        "head_lr": 1e-4,
+        "lambda_div": lambda_div,
+        "early_stop_patience": EARLY_STOP_PATIENCE
+    })
+    
     # Early stopping variables
     best_loss = float('inf')
     patience_counter = 0
     best_model_state = None
+    start_time = time.time()
     
     for epoch in range(MAX_EPOCHS):
         model.train()

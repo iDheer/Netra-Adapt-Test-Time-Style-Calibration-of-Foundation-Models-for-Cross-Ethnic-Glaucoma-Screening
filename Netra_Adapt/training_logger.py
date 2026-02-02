@@ -6,8 +6,22 @@ Logs all metrics, visualizations, hyperparameters, and training progress
 import os
 import json
 import time
+import numpy as np
 from datetime import datetime
 from pathlib import Path
+import matplotlib.pyplot as plt
+
+
+class NumpyEncoder(json.JSONEncoder):
+    """Custom JSON encoder for numpy types."""
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super(NumpyEncoder, self).default(obj)
 import matplotlib.pyplot as plt
 import pandas as pd
 
@@ -242,7 +256,7 @@ class ExperimentLogger:
         # Save to JSON
         json_file = eval_dir / f"{model_name.replace(' ', '_').replace('→', 'to')}_metrics.json"
         with open(json_file, "w") as f:
-            json.dump(metrics_dict, f, indent=4)
+            json.dump(metrics_dict, f, indent=4, cls=NumpyEncoder)
         
         # Add to final metrics
         self.metadata["final_metrics"][model_name] = metrics_dict

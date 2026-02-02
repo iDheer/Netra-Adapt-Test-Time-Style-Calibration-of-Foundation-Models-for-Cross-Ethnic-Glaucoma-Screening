@@ -38,6 +38,24 @@ def train():
     os.makedirs(SAVE_DIR, exist_ok=True)
     logger = Logger(save_dir=SAVE_DIR)
     
+    # Initialize experiment logger
+    exp_logger = get_logger()
+    hyperparameters = {
+        "dataset": "Chákṣu (Labeled)",
+        "train_csv": CSV_PATH,
+        "batch_size": BATCH_SIZE,
+        "max_epochs": MAX_EPOCHS,
+        "early_stop_patience": EARLY_STOP_PATIENCE,
+        "min_delta": MIN_DELTA,
+        "lr_backbone": 1e-5,
+        "lr_head": 1e-3,
+        "optimizer": "AdamW",
+        "weight_decay": 0.05,
+        "loss": "CrossEntropyLoss",
+        "device": DEVICE
+    }
+    exp_logger.log_phase_start("oracle", hyperparameters)
+    
     # Validate data exists
     if not os.path.exists(CSV_PATH):
         print(f"[ERROR] Training CSV not found: {CSV_PATH}")
@@ -62,9 +80,9 @@ def train():
     model = NetraModel(num_classes=2).to(DEVICE)
     
     # Optimizer with differential learning rates
-    # Note: HuggingFace DINOv3 uses encoder.layer instead of blocks
+    # Note: HuggingFace DINOv3 uses layer directly (not encoder.layer)
     optimizer = optim.AdamW([
-        {'params': model.backbone.encoder.layer[-2:].parameters(), 'lr': 1e-5},
+        {'params': model.backbone.layer[-2:].parameters(), 'lr': 1e-5},
         {'params': model.head.parameters(), 'lr': 1e-3}
     ], weight_decay=0.05)  # Higher regularization for smaller dataset
     
@@ -75,9 +93,15 @@ def train():
     print("   Note: Uses labeled Chákṣu data - NOT source-free!")
     print("="*60)
     
-    for epoch in range(EPOCHS):
+    # Early stopping variables
+    best_loss = float('inf')
+    patience_counter = 0
+    best_model_path = f"{SAVE_DIR}/best_oracle_model.pth"
+    start_time = time.time()
+    
+    for epoch in range(MAX_EPOCHS):
         model.train()
-        loop = tqdm(loader, desc=f"Epoch {epoch+1}/{EPOCHS}")
+        loop = tqdm(loader, desc=f"Epoch {epoch+1}/{MAX_EPOCHS}")
         epoch_loss = 0
         correct = 0
         total = 0
@@ -105,6 +129,7 @@ def train():
         avg_loss = epoch_loss / len(loader)
         accuracy = 100. * correct / total
         logger.log(epoch+1, avg_loss)
+        exp_logger.log_epoch("oracle", epoch+1, MAX_EPOCHS, {"loss": avg_loss, "accuracy": accuracy})
         print(f"  Epoch {epoch+1}/{MAX_EPOCHS}: Loss={avg_loss:.4f}, Accuracy={accuracy:.2f}%")
         
         # Early stopping check
@@ -118,6 +143,7 @@ def train():
             print(f"  No improvement ({patience_counter}/{EARLY_STOP_PATIENCE})")
             
             if patience_counter >= EARLY_STOP_PATIENCE:
+                exp_logger.log_early_stopping("oracle", epoch+1, best_loss)
                 print(f"\n⚠ Early stopping triggered! No improvement for {EARLY_STOP_PATIENCE} epochs.")
                 print(f"  Best loss: {best_loss:.4f} at epoch {epoch+1-EARLY_STOP_PATIENCE}")
                 break
@@ -129,7 +155,11 @@ def train():
     
     save_path = f"{SAVE_DIR}/oracle_model.pth"
     torch.save(model.state_dict(), save_path)
+    
+    training_time = time.time() - start_time
+    exp_logger.log_phase_end("oracle", training_time)
     print(f"✅ Oracle training complete! Model saved to {save_path}")
+    print(f"   Training time: {training_time/60:.1f} minutes")
 
 
 if __name__ == "__main__":
