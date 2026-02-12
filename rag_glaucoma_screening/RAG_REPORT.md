@@ -446,7 +446,7 @@ Key Libraries:
 ### 10.2 Reproducibility
 
 **Random Seeds:** 42 (for data shuffling)  
-**Hardware:** Vast.ai H200 GPU  
+**Hardware:** Vast.ai RTX 5090 GPU  
 **Feature Extraction:** Deterministic (no dropout)  
 **FAISS Index:** Exact L2 search (reproducible)
 
@@ -568,7 +568,6 @@ F1 = 2 × (Precision × Recall) / (Precision + Recall)
 ### 12.1 Research Team
 
 **Project:** Netra-Adapt: Test-Time Style Calibration for Cross-Ethnic Glaucoma Screening  
-**Institution:** [Your Institution]  
 **Repository:** https://github.com/iDheer/Netra-Adapt-Test-Time-Style-Calibration-of-Foundation-Models-for-Cross-Ethnic-Glaucoma-Screening
 
 ### 12.2 Citation
@@ -589,16 +588,6 @@ F1 = 2 × (Precision × Recall) / (Precision + Recall)
 - **Chákṣu Dataset:** Figshare contributors
 - **DINOv3 Model:** Meta AI Research
 - **Infrastructure:** Vast.ai cloud computing
-
----
-
-## Document Information
-
-**Version:** 1.0  
-**Last Updated:** February 12, 2026  
-**Status:** Final Report  
-**Pages:** 12  
-**Word Count:** ~4,500 words
 
 ---
 
