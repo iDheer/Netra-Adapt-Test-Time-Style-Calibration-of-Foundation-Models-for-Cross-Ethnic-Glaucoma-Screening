@@ -201,36 +201,47 @@ def run_adapt():
                 logits_final = model.head(feats_adapted)
                 probs = torch.softmax(logits_final, dim=1)
                 
-                # --- Information Maximization Loss (from paper Section 3.4) ---
+                # --- Information Maximization Loss (Standard SFDA Formulation) ---
+                # Following SHOT (Liang et al., NeurIPS 2020) and TENT (Wang et al., ICLR 2021)
                 
                 # Loss 1: Entropy Minimization (L_ent)
                 # Forces model to be decisive (predictions away from 0.5)
-                # Note: We MINIMIZE entropy, so this is positive
+                # We MINIMIZE entropy → want LOW values
                 entropy_per_sample = -torch.sum(probs * torch.log(probs + 1e-6), dim=1)
                 L_ent = torch.mean(entropy_per_sample)
                 
-                # Loss 2: Diversity Maximization (L_div)
-                # Prevents mode collapse (predicting all same class)
-                # We MAXIMIZE entropy of mean prediction (so NEGATIVE in loss)
+                # Loss 2: Diversity Regularization
+                # Prevents mode collapse by PENALIZING low diversity
+                # We want HIGH diversity (entropy close to log(C))
                 mean_probs = probs.mean(dim=0)  # [C] - average prediction across batch
-                L_div = -torch.sum(mean_probs * torch.log(mean_probs + 1e-6))
+                entropy_batch = -torch.sum(mean_probs * torch.log(mean_probs + 1e-6))
                 
-                # Total Loss: L_SFDA = L_ent - λ * L_div
-                # (minimize entropy, maximize diversity)
-                loss = L_ent - lambda_div * L_div
+                # Maximum possible entropy for binary classification
+                max_entropy = torch.log(torch.tensor(2.0))  # log(2) ≈ 0.693
+                
+                # Diversity penalty: penalize when entropy_batch is LOW
+                # When entropy_batch is high (0.693), penalty is 0
+                # When entropy_batch is low (0.1), penalty is high (0.593)
+                diversity_penalty = max_entropy - entropy_batch
+                
+                # Total Loss: L_IM = L_ent + λ × (log(C) - H_batch)
+                # This is ALWAYS POSITIVE and DECREASES when:
+                # - L_ent decreases (more confident predictions)
+                # - entropy_batch increases (more diverse predictions)
+                loss = L_ent + lambda_div * diversity_penalty
             
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             epoch_loss += loss.item()
-            loop.set_postfix(loss=loss.item(), ent=L_ent.item(), div=L_div.item())
+            loop.set_postfix(loss=loss.item(), ent=L_ent.item(), div=entropy_batch.item())
             
         avg_loss = epoch_loss / len(loader)
         logger.log(epoch+1, avg_loss)
         exp_logger.log_epoch("adapt", epoch+1, MAX_EPOCHS, {
             "loss": avg_loss,
             "L_ent": L_ent.item(),
-            "L_div": L_div.item()
+            "L_div": entropy_batch.item()
         })
         print(f"  Epoch {epoch+1} Complete - Avg Loss: {avg_loss:.4f}")
         

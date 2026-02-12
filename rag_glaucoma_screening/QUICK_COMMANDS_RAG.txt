@@ -1,0 +1,172 @@
+# RAG Glaucoma Screening - Quick Commands for Vast.ai
+
+# ============================================
+# SETUP (One-time)
+# ============================================
+
+# 1. Set Kaggle API token
+export KAGGLE_API_TOKEN=KGAT_0976ca4654d6cf8831b434187fc9660d
+
+# 2. Set HuggingFace token (for DINOv3 model)
+export HF_TOKEN=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
+huggingface-cli login --token $HF_TOKEN
+
+# 3. Navigate to RAG folder
+cd /workspace/rag_glaucoma_screening
+
+# 4. Run setup script (downloads datasets)
+chmod +x setup_with_download.sh
+./setup_with_download.sh
+
+# ============================================
+# RUN FULL PIPELINE
+# ============================================
+
+cd /workspace/rag_glaucoma_screening
+python run_rag_pipeline.py
+
+# This will:
+# 1. Create CSV files from image folders
+# 2. Extract DINOv3 features from AIROGS images ONLY
+# 3. Build FAISS index for fast similarity search
+# 4. Test all configurations on Chákṣu test set
+# 5. Generate comprehensive evaluation reports
+
+# ============================================
+# INDIVIDUAL STEPS (if needed)
+# ============================================
+
+# Step 1: Prepare data
+python prepare_data.py
+
+# Step 2: Build RAG database (AIROGS only)
+python build_rag_database.py
+
+# Step 3: Run evaluation (tests on Chákṣu)
+python evaluate_rag.py
+
+# ============================================
+# CHECK RESULTS
+# ============================================
+
+# View summary table with all configurations
+cat /workspace/evaluation_results/summary_table.csv | column -t -s,
+
+# View best configuration details
+cat /workspace/evaluation_results/k10_weighted_vote/metrics.json
+
+# Check per-image predictions
+head -20 /workspace/evaluation_results/k10_weighted_vote/rag_predictions.csv
+
+# ============================================
+# DATASET STRUCTURE AFTER SETUP
+# ============================================
+
+# /workspace/data/
+# ├── AIROGS/
+# │   ├── train/NRG/ (normal)
+# │   ├── train/RG/ (glaucoma)
+# │   ├── test/NRG/
+# │   └── test/RG/
+# └── CHAKSHU/
+#     ├── train/NRG/
+#     ├── train/RG/
+#     ├── train_unlabelled/
+#     ├── test/NRG/
+#     └── test/RG/
+
+# ============================================
+# RAG DATABASE CONTENTS
+# ============================================
+
+# ONLY AIROGS images (Western fundus images)
+# - AIROGS train: ~7,632 images
+# - AIROGS test: ~1,908 images
+# Total: ~9,540 Western images
+
+# Testing on: Chákṣu test (302 Indian images)
+# This is PURE zero-shot cross-ethnic transfer!
+
+# ============================================
+# KEY DIFFERENCES FROM FINE-TUNING
+# ============================================
+
+# Fine-tuning approach:
+# - Train on AIROGS (Western)
+# - Adapt on Chákṣu train (Indian)
+# - Test on Chákṣu test
+# Problem: Can overfit to camera artifacts
+
+# RAG approach:
+# - Build database from AIROGS only (Western)
+# - NO training or adaptation
+# - Test directly on Chákṣu (Indian)
+# Advantage: Pure zero-shot, interpretable
+
+# ============================================
+# MODEL DETAILS
+# ============================================
+
+# Model: facebook/dinov3-large (same as fine-tuning)
+# Feature dimension: 1024 (CLS token)
+# Similarity metric: L2 distance (Euclidean)
+# Index type: FAISS Flat (exact search)
+
+# ============================================
+# EVALUATION CONFIGURATIONS
+# ============================================
+
+# k values: [5, 10, 20, 50] neighbors
+# Aggregation methods:
+#   - majority_vote: Simple voting
+#   - weighted_vote: Weight by similarity
+#   - mean_prob: Mean of neighbor labels
+# Total: 12 configurations tested
+
+# ============================================
+# EXPECTED OUTPUT
+# ============================================
+
+# /workspace/evaluation_results/
+# ├── summary_table.csv              # All configs compared
+# ├── pipeline_summary.json          # Timing info
+# ├── auroc_heatmap.png             # Heatmap of AUROC
+# ├── accuracy_heatmap.png
+# ├── sensitivity_specificity.png
+# ├── all_metrics_comparison.png
+# ├── best_config_metrics.png
+# └── k{k}_{aggregation}/           # Per-config folders
+#     ├── metrics.json               # All metrics
+#     ├── roc_curve.png             # ROC curve
+#     ├── confusion_matrix.png      # Confusion matrix
+#     └── rag_predictions.csv       # Per-image results
+
+# ============================================
+# DEBUGGING
+# ============================================
+
+# Check if datasets downloaded correctly
+ls -lh /workspace/data/AIROGS/train/
+ls -lh /workspace/data/CHAKSHU/test/
+
+# Check if CSVs created
+ls -lh /workspace/data/*.csv
+
+# Check RAG database
+ls -lh /workspace/rag_database/
+
+# Check GPU usage
+nvidia-smi
+
+# Check Python packages
+pip list | grep -E "torch|transformers|faiss"
+
+# ============================================
+# TIMING ESTIMATES (RTX 3090)
+# ============================================
+
+# Data preparation: ~30 seconds
+# Feature extraction: ~25-35 minutes (9,540 AIROGS images)
+# Build FAISS index: ~10 seconds
+# Evaluation: ~12-18 minutes (302 test images × 12 configs)
+# Total: ~40-55 minutes
