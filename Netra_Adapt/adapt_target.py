@@ -24,28 +24,28 @@ from utils import Logger
 
 # --- CONFIGURATION ---
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-BATCH_SIZE = 32  # Reduced for ViT-L memory with 512x512 input
-MAX_EPOCHS = 25  # Upper limit for adaptation
-EARLY_STOP_PATIENCE = 5  # Stop if loss plateaus
-MIN_DELTA = 1e-4  # Minimum loss improvement
+BATCH_SIZE = 48  # Increased from 32 - need larger batches for MixEnt statistics
+MAX_EPOCHS = 40  # Increased from 25 - test-time adaptation needs more iterations
+EARLY_STOP_PATIENCE = 10  # Increased from 5 - adaptation is gradual
+MIN_DELTA = 1e-5  # More lenient from 1e-4
 SOURCE_WEIGHTS = "/workspace/results/Source_AIROGS/model.pth"
-TARGET_CSV = "/workspace/data/processed_csvs/chaksu_train_unlabeled.csv"  # Training split only!
+TARGET_CSV = "/workspace/data/processed_csvs/chaksu_test_labeled.csv"  # Test-Time Adaptation: adapt on test set (labels ignored)
 SAVE_DIR = "/workspace/results/Netra_Adapt"
 
 
-def mixent_adapt(features, logits, lambda_mix=0.5):
+def mixent_adapt(features, logits):
     """
     MixEnt-Adapt: Uncertainty-Guided Token Injection
     
-    As per paper Section 3.3:
+    Test-Time Adaptation Strategy:
     - Partition batch into Confident (low entropy) and Uncertain (high entropy) sets
     - Inject confident feature statistics into uncertain samples via AdaIN
-    - This "hallucinates" a stable domain, neutralizing pigmentation shifts
+    - This calibrates uncertain predictions using confident predictions as "pseudo-labels"
+    - No diversity penalty - let the model naturally find the test distribution
     
     Args:
         features: [B, D] token embeddings from DINOv3 backbone
         logits: [B, C] classification logits for entropy computation
-        lambda_mix: mixing strength (0=no mixing, 1=full replacement)
     
     Returns:
         Adapted features with style-injected uncertain samples
@@ -94,8 +94,8 @@ def mixent_adapt(features, logits, lambda_mix=0.5):
     # AdaIN: z_adapted = sigma_c * ((z_u - mu_u) / sigma_u) + mu_c
     z_adapted = sig_c_sel * z_unc_norm + mu_c_sel
     
-    # Soft mixing: blend original and adapted features
-    z_mixed = lambda_mix * z_adapted + (1 - lambda_mix) * z_unc
+    # Soft mixing: blend original and adapted features (50-50 mix)
+    z_mixed = 0.5 * z_adapted + 0.5 * z_unc
     
     # Reconstruct full batch
     features_out = features.clone()
@@ -134,7 +134,7 @@ def run_adapt():
     print(f"  Loaded weights from {SOURCE_WEIGHTS}")
     
     # Load target dataset (unlabeled)
-    print("Loading Chákṣu target dataset (unlabeled)...")
+    print("Loading Chákṣu target dataset (TEST SET - labels ignored during adaptation)...")
     dataset = GlaucomaDataset(TARGET_CSV, transform=get_transforms(is_training=True))
     loader = DataLoader(
         dataset, 
@@ -142,36 +142,36 @@ def run_adapt():
         shuffle=True, 
         num_workers=8,
         pin_memory=True,
-        drop_last=True  # Important for batch statistics
+        drop_last=True  # Critical for MixEnt: need consistent batch size for statistics
     )
     print(f"  Dataset size: {len(dataset)} images")
     print(f"  Batches per epoch: {len(loader)}")
+    print(f"  NOTE: Labels exist but are NOT used - purely test-time adaptation!")
     
-    # Optimizer with very low LR for adaptation
+    # Optimizer with moderate LR for test-time adaptation
     # Note: HuggingFace DINOv3 uses layer directly (not encoder.layer)
-    optimizer = optim.SGD([
-        {'params': model.backbone.layer[-2:].parameters(), 'lr': 1e-6},
-        {'params': model.head.parameters(), 'lr': 1e-4}
-    ], momentum=0.9)
+    # Using AdamW instead of SGD for better adaptation (adaptive learning rates)
+    optimizer = optim.AdamW([
+        {'params': model.backbone.layer[-2:].parameters(), 'lr': 5e-6},  # Increased from 1e-6
+        {'params': model.head.parameters(), 'lr': 5e-4}  # Increased from 1e-4
+    ], weight_decay=0.001)  # Light regularization
     
-    # Hyperparameter for diversity loss weight (from paper Section 3.4)
-    lambda_div = 1.0
-    
-    print("--- Phase C: MixEnt-Adapt (Source-Free Domain Adaptation) ---")
-    print(f"    Using Information Maximization Loss (λ_div={lambda_div})")
+    print("--- Phase C: MixEnt-Adapt (Test-Time Adaptation) ---")
+    print(f"    Using Entropy Minimization Loss (confident teaches uncertain)")
+    print(f"    Labels are IGNORED during adaptation - used only for evaluation!")
     print(f"    Early Stopping: patience={EARLY_STOP_PATIENCE}, min_delta={MIN_DELTA}")
     
     # Log phase start
     exp_logger.log_phase_start("adapt", {
-        "algorithm": "MixEnt-Adapt",
+        "algorithm": "MixEnt-Adapt (Test-Time Adaptation)",
         "source_model": SOURCE_WEIGHTS,
         "target_dataset": TARGET_CSV,
         "batch_size": BATCH_SIZE,
         "max_epochs": MAX_EPOCHS,
-        "optimizer": "SGD",
-        "backbone_lr": 1e-6,
-        "head_lr": 1e-4,
-        "lambda_div": lambda_div,
+        "optimizer": "AdamW",
+        "backbone_lr": 5e-6,
+        "head_lr": 5e-4,
+        "weight_decay": 0.001,
         "early_stop_patience": EARLY_STOP_PATIENCE
     })
     
@@ -201,49 +201,35 @@ def run_adapt():
                 logits_final = model.head(feats_adapted)
                 probs = torch.softmax(logits_final, dim=1)
                 
-                # --- Information Maximization Loss (Standard SFDA Formulation) ---
-                # Following SHOT (Liang et al., NeurIPS 2020) and TENT (Wang et al., ICLR 2021)
+                # --- Test-Time Adaptation Loss: Pure Entropy Minimization ---
+                # Strategy: Confident predictions teach uncertain predictions
+                # NO diversity penalty - we don't assume class balance in test set
                 
-                # Loss 1: Entropy Minimization (L_ent)
-                # Forces model to be decisive (predictions away from 0.5)
-                # We MINIMIZE entropy → want LOW values
+                # Entropy Minimization: Forces decisive predictions
+                # High entropy [0.5, 0.5] → Low entropy [0.95, 0.05] or [0.05, 0.95]
+                # Confident samples will have low entropy, uncertain have high entropy
+                # By minimizing avg entropy, uncertain samples learn from confident ones
                 entropy_per_sample = -torch.sum(probs * torch.log(probs + 1e-6), dim=1)
-                L_ent = torch.mean(entropy_per_sample)
+                loss = torch.mean(entropy_per_sample)
                 
-                # Loss 2: Diversity Regularization
-                # Prevents mode collapse by PENALIZING low diversity
-                # We want HIGH diversity (entropy close to log(C))
-                mean_probs = probs.mean(dim=0)  # [C] - average prediction across batch
+                # Track batch entropy for monitoring (not used in loss)
+                mean_probs = probs.mean(dim=0)
                 entropy_batch = -torch.sum(mean_probs * torch.log(mean_probs + 1e-6))
-                
-                # Maximum possible entropy for binary classification
-                max_entropy = torch.log(torch.tensor(2.0))  # log(2) ≈ 0.693
-                
-                # Diversity penalty: penalize when entropy_batch is LOW
-                # When entropy_batch is high (0.693), penalty is 0
-                # When entropy_batch is low (0.1), penalty is high (0.593)
-                diversity_penalty = max_entropy - entropy_batch
-                
-                # Total Loss: L_IM = L_ent + λ × (log(C) - H_batch)
-                # This is ALWAYS POSITIVE and DECREASES when:
-                # - L_ent decreases (more confident predictions)
-                # - entropy_batch increases (more diverse predictions)
-                loss = L_ent + lambda_div * diversity_penalty
             
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             epoch_loss += loss.item()
-            loop.set_postfix(loss=loss.item(), ent=L_ent.item(), div=entropy_batch.item())
+            loop.set_postfix(loss=loss.item(), ent=loss.item(), batch_div=entropy_batch.item())
             
         avg_loss = epoch_loss / len(loader)
         logger.log(epoch+1, avg_loss)
         exp_logger.log_epoch("adapt", epoch+1, MAX_EPOCHS, {
             "loss": avg_loss,
-            "L_ent": L_ent.item(),
-            "L_div": entropy_batch.item()
+            "entropy": avg_loss,
+            "batch_diversity": entropy_batch.item()
         })
-        print(f"  Epoch {epoch+1} Complete - Avg Loss: {avg_loss:.4f}")
+        print(f"  Epoch {epoch+1} Complete - Avg Entropy: {avg_loss:.4f} (Batch Div: {entropy_batch.item():.4f})")
         
         # Early stopping logic
         if avg_loss < (best_loss - MIN_DELTA):

@@ -19,10 +19,10 @@ from training_logger import get_logger
 
 # --- CONFIGURATION ---
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-BATCH_SIZE = 32  # Reduced for ViT-L memory requirements (512x512 input)
-MAX_EPOCHS = 50  # Upper limit
-EARLY_STOP_PATIENCE = 5  # Stop if no improvement for 5 epochs
-MIN_DELTA = 1e-4  # Minimum loss improvement to count as progress
+BATCH_SIZE = 48  # Increased from 32 for better gradient estimates
+MAX_EPOCHS = 60  # Increased from 50 for better convergence
+EARLY_STOP_PATIENCE = 8  # Increased from 5 - less aggressive stopping
+MIN_DELTA = 1e-5  # More lenient than 1e-4
 CSV_PATH = "/workspace/data/processed_csvs/airogs_train.csv"
 SAVE_DIR = "/workspace/results/Source_AIROGS"
 

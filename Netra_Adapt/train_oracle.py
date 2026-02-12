@@ -22,10 +22,10 @@ from training_logger import get_logger
 
 # --- CONFIGURATION ---
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-BATCH_SIZE = 24  # Smaller batch for smaller dataset + ViT-L memory
-MAX_EPOCHS = 60  # Upper limit (higher for small dataset)
-EARLY_STOP_PATIENCE = 8  # More patience for small dataset
-MIN_DELTA = 1e-4  # Minimum loss improvement
+BATCH_SIZE = 32  # Increased from 24 for more stable gradients
+MAX_EPOCHS = 80  # Increased from 60 - small dataset needs more epochs
+EARLY_STOP_PATIENCE = 12  # Increased from 8 - much more patience for small data
+MIN_DELTA = 1e-5  # More lenient from 1e-4
 CSV_PATH = "/workspace/data/processed_csvs/chaksu_train_labeled.csv"  # Training split only!
 SAVE_DIR = "/workspace/results/Oracle_Chaksu"
 
@@ -47,10 +47,10 @@ def train():
         "max_epochs": MAX_EPOCHS,
         "early_stop_patience": EARLY_STOP_PATIENCE,
         "min_delta": MIN_DELTA,
-        "lr_backbone": 1e-5,
-        "lr_head": 1e-3,
+        "lr_backbone": 2e-5,
+        "lr_head": 2e-3,
         "optimizer": "AdamW",
-        "weight_decay": 0.05,
+        "weight_decay": 0.01,
         "loss": "CrossEntropyLoss",
         "device": DEVICE
     }
@@ -82,9 +82,9 @@ def train():
     # Optimizer with differential learning rates
     # Note: HuggingFace DINOv3 uses layer directly (not encoder.layer)
     optimizer = optim.AdamW([
-        {'params': model.backbone.layer[-2:].parameters(), 'lr': 1e-5},
-        {'params': model.head.parameters(), 'lr': 1e-3}
-    ], weight_decay=0.05)  # Higher regularization for smaller dataset
+        {'params': model.backbone.layer[-2:].parameters(), 'lr': 2e-5},  # Slightly higher
+        {'params': model.head.parameters(), 'lr': 2e-3}  # Slightly higher
+    ], weight_decay=0.01)  # Reduced from 0.05 - was too aggressive for small data
     
     criterion = nn.CrossEntropyLoss()
     

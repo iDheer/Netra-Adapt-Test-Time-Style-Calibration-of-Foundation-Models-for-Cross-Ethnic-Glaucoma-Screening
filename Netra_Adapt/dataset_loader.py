@@ -92,13 +92,28 @@ class GlaucomaDataset(Dataset):
         return image, torch.tensor(label, dtype=torch.long)
 
 def get_transforms(is_training=True):
+    """Enhanced medical image augmentation for fundus images."""
     mean, std = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
     if is_training:
         return transforms.Compose([
-            transforms.RandomHorizontalFlip(),
-            transforms.RandomVerticalFlip(),
-            transforms.RandomRotation(20),
-            transforms.ColorJitter(brightness=0.1, contrast=0.1),
+            # Geometric augmentations (anatomically valid)
+            transforms.RandomHorizontalFlip(p=0.5),
+            transforms.RandomVerticalFlip(p=0.5),
+            transforms.RandomRotation(degrees=30),  # Increased from 20
+            transforms.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.9, 1.1)),
+            
+            # Color augmentations (crucial for cross-ethnic fundus adaptation)
+            # Indian eyes have darker pigmentation → need stronger color variation
+            transforms.ColorJitter(
+                brightness=0.2,   # Increased from 0.1
+                contrast=0.2,     # Increased from 0.1
+                saturation=0.15,  # NEW: handle pigmentation differences
+                hue=0.05          # NEW: slight hue variation
+            ),
+            
+            # Mild Gaussian blur (simulates image quality variance)
+            transforms.RandomApply([transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 1.0))], p=0.3),
+            
             transforms.ToTensor(),
             transforms.Normalize(mean, std)
         ])
