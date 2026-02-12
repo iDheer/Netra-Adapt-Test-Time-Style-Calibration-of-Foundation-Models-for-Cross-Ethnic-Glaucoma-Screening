@@ -20,8 +20,6 @@ Netra-Adapt solves this through **Source-Free Domain Adaptation (SFDA)**, requir
 
 1. **Foundation Model Backbone**: First validation of DINOv3 for cross-ethnic medical adaptation, showing self-supervised geometric features are naturally robust to pigmentation shifts
 2. **MixEnt-Adapt Algorithm**: Novel entropy-guided token adaptation that selectively injects confident target styles into uncertain samples via Adaptive Instance Normalization
-3. **Democratized Deployment**: Optimized for edge hardware (RTX 2080 Ti) despite using large Vision Transformer foundation
-
 ---
 
 ## 🎯 Key Features
